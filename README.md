@@ -265,4 +265,4 @@ Error responses:
 
 - Designed and implemented a full MLOps pipeline (CI/CD, model registry, evaluation gate, canary deploy) on free tier GitHub Actions + Hugging Face Hub/Spaces with zero cloud spend
 - Built production-grade FastAPI inference service with letterbox preprocessing, numpy NMS, ONNX/PT dual backend, per-IP rate limiting, and base64 annotated responses
-- Created automated regression gate comparing map50_95 against baseline on held-out golden set, blocking deploy on >1.5% drop with clear SKIP/FAIL/PASS semantics
+- Created automated regression gate comparing map50_95 against baseline on held-out golden set, blocking deploy on >1.5% drop with clear SKIP/FAIL/PASS semantics# Trigger workflow
