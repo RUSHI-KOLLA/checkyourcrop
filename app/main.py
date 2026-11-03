@@ -63,12 +63,14 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 class HealthResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     status: str
     version: str
     model_loaded: bool
 
 
 class ModelInfoResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     backend: str
     class_names: dict
     registry_source: str
@@ -84,6 +86,7 @@ class DetectionResponse(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     verdict: str
     counts: dict
     detections: list
