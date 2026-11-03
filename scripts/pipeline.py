@@ -5,6 +5,7 @@ Stages: lint, test, build, evaluate, register, deploy, smoke
 """
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -60,32 +61,57 @@ def stage_build() -> tuple[bool, str]:
     return False, f"build: FAIL\n{out}\n{err}"
 
 
+def _download_from_hf(repo_id: str, filename: str, local_path: str) -> bool:
+    """Download file from HF Hub. Returns True if successful."""
+    try:
+        from huggingface_hub import hf_hub_download
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        hf_hub_download(repo_id=repo_id, filename=filename, local_dir=os.path.dirname(local_path), local_dir_use_symlinks=False)
+        # hf_hub_download saves to local_dir/filename, but we want local_path
+        downloaded = os.path.join(os.path.dirname(local_path), filename)
+        if downloaded != local_path and os.path.exists(downloaded):
+            shutil.move(downloaded, local_path)
+        return True
+    except Exception as e:
+        print(f"Download failed: {e}")
+        return False
+
+
 def stage_evaluate() -> tuple[bool, str]:
     """Run evaluation gate."""
     # Check for required inputs
     if not os.path.exists("eval/golden/data.yaml"):
         return True, "evaluate: SKIP (eval/golden/data.yaml not found)"
 
-    # Check for baseline metrics
+    model_repo = os.getenv("HF_MODEL_REPO")
+    if not model_repo:
+        return True, "evaluate: SKIP (HF_MODEL_REPO not set)"
+
+    # Download baseline metrics from HF Hub if not present
     baseline_file = "outputs/baseline_metrics.json"
     if not os.path.exists(baseline_file):
-        return True, f"evaluate: SKIP (baseline metrics not found at {baseline_file})"
+        print("Downloading baseline metrics from HF Hub...")
+        if not _download_from_hf(model_repo, "metrics.json", baseline_file):
+            return True, f"evaluate: SKIP (could not download baseline metrics from {model_repo})"
 
     import json
     with open(baseline_file) as f:
         baseline = json.load(f)
     baseline_map = baseline.get("map50_95", 0.0)
 
-    # Check for model weights
-    if not os.path.exists("models/best.pt"):
-        return True, "evaluate: SKIP (models/best.pt not found)"
+    # Download model weights from HF Hub if not present
+    weights_file = "models/best.pt"
+    if not os.path.exists(weights_file):
+        print("Downloading model weights from HF Hub...")
+        if not _download_from_hf(model_repo, "best.pt", weights_file):
+            return True, f"evaluate: SKIP (could not download weights from {model_repo})"
 
     code, out, err = run_cmd([
         "python", "scripts/evaluate.py",
         "--baseline", str(baseline_map),
         "--tolerance", "0.015",
         "--data", "eval/golden/data.yaml",
-        "--weights", "models/best.pt",
+        "--weights", weights_file,
         "--output", "outputs/metrics.json",
     ])
     if code == 0:
@@ -107,13 +133,18 @@ def stage_register() -> tuple[bool, str]:
     if not model_repo:
         return True, "register: SKIP (HF_MODEL_REPO not set)"
 
-    # Check for weights
-    if not os.path.exists("models/best.pt"):
-        return True, "register: SKIP (models/best.pt not found)"
+    # Download weights from HF Hub if not present
+    weights_file = "models/best.pt"
+    if not os.path.exists(weights_file):
+        print("Downloading model weights from HF Hub...")
+        if not _download_from_hf(model_repo, "best.pt", weights_file):
+            return True, "register: SKIP (models/best.pt not found and could not download)"
 
-    # Check for metrics
-    if not os.path.exists("outputs/metrics.json"):
-        return True, "register: SKIP (outputs/metrics.json not found)"
+    # Download metrics from HF Hub if not present (will be created by evaluate stage)
+    metrics_file = "outputs/metrics.json"
+    if not os.path.exists(metrics_file):
+        print("Downloading metrics from HF Hub...")
+        _download_from_hf(model_repo, "metrics.json", metrics_file)
 
     # Get git SHA
     code, sha, _ = run_cmd(["git", "rev-parse", "HEAD"])
@@ -145,7 +176,8 @@ def stage_register() -> tuple[bool, str]:
 def stage_deploy() -> tuple[bool, str]:
     """Deploy to HF Spaces."""
     # Check for HF_TOKEN
-    if not os.getenv("HF_TOKEN"):
+    hf_token = os.getenv("HF_TOKEN")
+    if not hf_token:
         return True, "deploy: SKIP (HF_TOKEN not set)"
 
     # Check for Space repo
@@ -162,16 +194,21 @@ def stage_deploy() -> tuple[bool, str]:
     code, sha, _ = run_cmd(["git", "rev-parse", "HEAD"])
     sha = "unknown" if code != 0 else sha.strip()[:8]
 
-    # Clone space repo
+    # Clone space repo with HF_TOKEN auth
     import shutil
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmpdir:
         space_dir = Path(tmpdir) / "space"
-        # Clone
-        code, out, err = run_cmd(["git", "clone", f"https://huggingface.co/spaces/{space_repo}", str(space_dir)])
+        # Clone using token authentication
+        clone_url = f"https://oauth2:{hf_token}@huggingface.co/spaces/{space_repo}"
+        code, out, err = run_cmd(["git", "clone", clone_url, str(space_dir)])
         if code != 0:
             return False, f"deploy: FAIL (clone failed)\n{out}\n{err}"
+
+        # Configure git user
+        run_cmd(["git", "config", "user.name", "CI"], cwd=str(space_dir))
+        run_cmd(["git", "config", "user.email", "ci@example.com"], cwd=str(space_dir))
 
         # Sync project files (excluding .git, build, outputs, runs, data, eval, caches)
         exclude_dirs = {".git", "build", "outputs", "runs", "data", "eval", "__pycache__", ".pytest_cache", "venv", ".venv", "models"}
@@ -207,11 +244,13 @@ app_port: 7860
         if code != 0:
             return False, f"deploy: FAIL (git add failed)\n{out}\n{err}"
 
-        code, out, err = run_cmd(["git", "commit", "-m", f"Deploy {sha}"], cwd=str(space_dir), env={**os.environ, "GIT_AUTHOR_NAME": "CI", "GIT_AUTHOR_EMAIL": "ci@example.com", "GIT_COMMITTER_NAME": "CI", "GIT_COMMITTER_EMAIL": "ci@example.com"})
+        code, out, err = run_cmd(["git", "commit", "-m", f"Deploy {sha}"], cwd=str(space_dir))
         if code != 0:
             return False, f"deploy: FAIL (git commit failed)\n{out}\n{err}"
 
-        code, out, err = run_cmd(["git", "push"], cwd=str(space_dir))
+        # Push with token authentication
+        push_url = f"https://oauth2:{hf_token}@huggingface.co/spaces/{space_repo}"
+        code, out, err = run_cmd(["git", "push", push_url], cwd=str(space_dir))
         if code != 0:
             return False, f"deploy: FAIL (git push failed)\n{out}\n{err}"
 
