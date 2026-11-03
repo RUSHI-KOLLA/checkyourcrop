@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CheckYourCrop - Crop vs Weed Detection</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { text-align: center; color: #333; margin-bottom: 8px; }
+    .subtitle { text-align: center; color: #666; margin-bottom: 24px; }
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      margin-bottom: 16px;
+    }
+    .drop-zone {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+    .drop-zone input { display: none; }
+    .drop-zone p { color: #666; margin-top: 8px; }
+    .drop-zone small { color: #999; }
+    .preview { display: none; max-width: 100%; max-height: 400px; border-radius: 4px; margin-top: 16px; }
+    .btn {
+      display: inline-block;
+      padding: 12px 24px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.2s;
+      width: 100%;
+      margin-top: 16px;
+    }
+    .btn:hover:not(:disabled) { background: #1d4ed8; }
+    .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+    .results { display: none; }
+    .verdict {
+      display: inline-block;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .verdict.crop { background: #dcfce7; color: #166534; }
+    .verdict.weed { background: #fee2e2; color: #991b1b; }
+    .verdict.mixed { background: #fef3c7; color: #92400e; }
+    .verdict.none { background: #e5e7eb; color: #374151; }
+    .stats { display: flex; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+    .stat {
+      flex: 1;
+      min-width: 120px;
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .stat-value { font-size: 24px; font-weight: 700; color: #111827; }
+    .stat-label { font-size: 12px; color: #6b7280; text-transform: uppercase; }
+    .detections { margin-top: 16px; }
+    .detection-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      background: #f9fafb;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .detection-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+    }
+    .detection-info { flex: 1; }
+    .detection-name { font-weight: 500; }
+    .detection-conf { font-size: 13px; color: #6b7280; }
+    .annotated-img { max-width: 100%; border-radius: 4px; margin-top: 16px; }
+    .error { color: #dc2626; background: #fef2f2; padding: 12px; border-radius: 6px; display: none; }
+    .loading { display: none; text-align: center; color: #666; margin-top: 16px; }
+    .spinner {
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    footer { text-align: center; color: #9ca3af; font-size: 13px; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>CheckYourCrop</h1>
+    <p class="subtitle">Upload a crop photo to detect weeds</p>
+
+    <div class="card">
+      <div class="drop-zone" id="dropZone">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color:#9ca3af;">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+        </svg>
+        <p>Drag & drop an image or click to select</p>
+        <small>JPG, PNG up to 10 MB</small>
+        <input type="file" id="fileInput" accept="image/*">
+      </div>
+      <img id="preview" class="preview" alt="Preview">
+      <button class="btn" id="predictBtn" disabled>Analyze</button>
+      <div class="loading" id="loading"><div class="spinner"></div> Analyzing...</div>
+      <div class="error" id="error"></div>
+    </div>
+
+    <div class="card results" id="results">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h2 style="font-size:18px;">Result</h2>
+        <span id="verdictBadge" class="verdict"></span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="stat-value" id="countCrop">0</div><div class="stat-label">Crop</div></div>
+        <div class="stat"><div class="stat-value" id="countWeed">0</div><div class="stat-label">Weed</div></div>
+        <div class="stat"><div class="stat-value" id="countOther">0</div><div class="stat-label">Other</div></div>
+        <div class="stat"><div class="stat-value" id="countTotal">0</div><div class="stat-label">Total</div></div>
+      </div>
+      <div class="detections" id="detections"></div>
+      <img id="annotatedImg" class="annotated-img" alt="Annotated result">
+    </div>
+
+    <footer>
+      Model: YOLOv8 (weed detection) | <a href="/api/model" style="color:#2563eb;">API Info</a> | <a href="/healthz" style="color:#2563eb;">Health</a>
+    </footer>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const preview = document.getElementById('preview');
+    const predictBtn = document.getElementById('predictBtn');
+    const loading = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const results = document.getElementById('results');
+    const verdictBadge = document.getElementById('verdictBadge');
+    const countCrop = document.getElementById('countCrop');
+    const countWeed = document.getElementById('countWeed');
+    const countOther = document.getElementById('countOther');
+    const countTotal = document.getElementById('countTotal');
+    const detectionsEl = document.getElementById('detections');
+    const annotatedImg = document.getElementById('annotatedImg');
+
+    let currentFile = null;
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+    function handleFile(file) {
+      if (!file || !file.type.startsWith('image/')) {
+        showError('Please select an image file');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        showError('File too large (max 10 MB)');
+        return;
+      }
+      currentFile = file;
+      const url = URL.createObjectURL(file);
+      preview.src = url;
+      preview.style.display = 'block';
+      predictBtn.disabled = false;
+      hideError();
+      results.style.display = 'none';
+    }
+
+    predictBtn.addEventListener('click', async () => {
+      if (!currentFile) return;
+      predictBtn.disabled = true;
+      loading.style.display = 'block';
+      hideError();
+      results.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('file', currentFile);
+
+      try {
+        const resp = await fetch('/api/predict', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Request failed');
+        showResults(data);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        predictBtn.disabled = false;
+        loading.style.display = 'none';
+      }
+    });
+
+    function showResults(data) {
+      verdictBadge.textContent = data.verdict.toUpperCase();
+      verdictBadge.className = 'verdict ' + data.verdict;
+      countCrop.textContent = data.counts.crop || 0;
+      countWeed.textContent = data.counts.weed || 0;
+      countOther.textContent = data.counts.other || 0      const total = (data.counts.crop || 0) + (data.counts.weed || 0) + (data.counts.other || 0);
+      countTotal.textContent = total;
+
+      detectionsEl.innerHTML = '';
+      data.detections.forEach(det => {
+        const group = getGroup(det.class_name);
+        const color = groupColors[group];
+        const div = document.createElement('div');
+        div.className = 'detection-item';
+        div.innerHTML = `
+          <div class="detection-color" style="background:${color}"></div>
+          <div class="detection-info">
+            <div class="detection-name">${det.class_name}</div>
+            <div class="detection-conf">Confidence: ${(det.confidence * 100).toFixed(1)}%</div>
+          </div>
+        `;
+        detectionsEl.appendChild(div);
+      });
+
+      if (data.annotated_image) {
+        annotatedImg.src = data.annotated_image;
+        annotatedImg.style.display = 'block';
+      } else {
+        annotatedImg.style.display = 'none';
+      }
+
+      results.style.display = 'block';
+      results.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    const groupColors = { crop: '#22c55e', weed: '#ef4444', other: '#f97316' };
+    function getGroup(name) {
+      const n = name.toLowerCase();
+      if (n.includes('weed')) return 'weed';
+      const crops = ['crop','maize','corn','soy','bean','wheat','rice','cotton','canola','tomato','potato'];
+      if (crops.some(c => n.includes(c))) return 'crop';
+      return 'other';
+    }
+
+    function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
+    function hideError() { errorEl.style.display = 'none'; }
+  </script>
+</body>
+</html>

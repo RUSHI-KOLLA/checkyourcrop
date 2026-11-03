@@ -1,0 +1,40 @@
+name: MLOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_MODEL_REPO: ${{ vars.HF_MODEL_REPO }}
+      HF_SPACE: ${{ vars.HF_SPACE }}
+      SERVICE_URL: ${{ vars.SERVICE_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run lint, test, build
+        run: python scripts/pipeline.py --stage lint,test,build
+
+      - name: Run evaluate, register, deploy, smoke
+        if: env.HF_TOKEN != '' && env.HF_MODEL_REPO != '' && env.HF_SPACE != '' && env.SERVICE_URL != ''
+        run: python scripts/pipeline.py --stage evaluate,register,deploy,smoke

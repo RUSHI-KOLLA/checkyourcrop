@@ -1,0 +1,29 @@
+[project]
+name = "checkyourcrop"
+version = "0.1.0"
+description = "Crop vs Weed Detection MLOps Pipeline"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+select = ["E", "F", "I", "W", "UP", "B", "C4", "SIM", "T20"]
+ignore = ["E501", "SIM102", "SIM103", "T201"]
+exclude = [".git", "__pycache__", "venv", ".venv", "build", "dist", "*.egg-info", "outputs", "runs", "data", "eval", "models"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning:ultralytics",
+]

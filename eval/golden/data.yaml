@@ -1,0 +1,28 @@
+# Held-out evaluation dataset (golden set)
+# Used by the evaluation gate to detect model regression.
+# Populate eval/golden/images/val/ with ~50 labeled images from your test split.
+# Run: python scripts/evaluate.py --baseline <map50_95_from_training>
+
+path: eval/golden
+val: images/val
+
+names:
+  0: Waterhemp
+  1: MorningGlory
+  2: Purslane
+  3: SpottedSpurge
+  4: Carpetweed
+  5: Ragweed
+  6: Eclipta
+  7: PricklySida
+  8: PalmerAmaranth
+  9: Sicklepod
+  10: Goosegrass
+  11: Kena
+  12: Lavhala
+  13: Gajar Gavat
+  14: Graceful Sandmart
+  15: Sicklepod Mh
+  16: Harali
+  17: OtherWeed
+  18: Lamber Quarter Plant

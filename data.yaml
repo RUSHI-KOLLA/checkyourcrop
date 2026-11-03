@@ -1,0 +1,29 @@
+# Training dataset configuration
+# This file documents the dataset structure used for training the model.
+# The actual data is not committed to git.
+
+path: data  # dataset root dir
+train: images/train  # train images (relative to path)
+val: images/val  # val images (relative to path)
+
+# Classes (19 weed classes from the checkpoint)
+names:
+  0: Waterhemp
+  1: MorningGlory
+  2: Purslane
+  3: SpottedSpurge
+  4: Carpetweed
+  5: Ragweed
+  6: Eclipta
+  7: PricklySida
+  8: PalmerAmaranth
+  9: Sicklepod
+  10: Goosegrass
+  11: Kena
+  12: Lavhala
+  13: Gajar Gavat
+  14: Graceful Sandmart
+  15: Sicklepod Mh
+  16: Harali
+  17: OtherWeed
+  18: Lamber Quarter Plant

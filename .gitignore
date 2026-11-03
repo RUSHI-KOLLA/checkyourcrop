@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.env
+.env.local
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model weights (stored in HF Hub, not git)
+*.pt
+*.onnx
+models/
+*.bin
+
+# Data
+data/
+eval/golden/images/
+*.csv
+*.json
+
+# Outputs
+outputs/
+runs/
+logs/
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Docker
+.docker/
+
+# Hugging Face
+.huggingface/

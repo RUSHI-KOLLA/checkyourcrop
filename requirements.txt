@@ -1,0 +1,10 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+ultralytics==8.4.199
+opencv-python-headless==4.10.0.84
+pillow==10.4.0
+python-multipart==0.0.9
+pydantic==2.9.2
+huggingface-hub==0.24.7
+requests==2.32.3
+python-dotenv==1.0.1
