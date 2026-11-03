@@ -327,27 +327,29 @@ def run_inference(
 
     # Letterbox
     img_resized, ratio, pad = letterbox(img, new_shape=(640, 640))
-    # Normalize and transpose to CHW
-    img_input = img_resized.astype(np.float32) / 255.0
-    img_input = img_input.transpose(2, 0, 1)[np.newaxis, ...]  # (1, 3, 640, 640)
 
-    # Inference
-    output = detector(img_input)
+    # Inference - ultralytics expects HWC numpy array (not batched CHW)
+    # Returns post-processed detections: [x1, y1, x2, y2, conf, class_id]
+    output = detector(img_resized)
 
-    # Parse output
-    boxes, scores, class_ids = parse_yolo_output(output, nc=len(CLASS_NAMES))
-
-    # Convert xywh to xyxy
-    boxes = xywh2xyxy(boxes)
+    # Handle ultralytics post-processed output format (N, 6): [x1, y1, x2, y2, conf, class_id]
+    if output.ndim == 2 and output.shape[1] == 6:
+        boxes = output[:, :4]
+        scores = output[:, 4]
+        class_ids = output[:, 5].astype(int)
+    else:
+        # Fallback to raw output parsing
+        boxes, scores, class_ids = parse_yolo_output(output, nc=len(CLASS_NAMES))
+        boxes = xywh2xyxy(boxes)
 
     # Scale back to original image
     boxes = scale_boxes(boxes, ratio, pad, orig_shape)
 
-    # NMS
-    keep = nms(boxes, scores, iou_threshold, conf_threshold)
-    boxes = boxes[keep]
-    scores = scores[keep]
-    class_ids = class_ids[keep]
+    # Filter by confidence (NMS already done by ultralytics)
+    mask = scores >= conf_threshold
+    boxes = boxes[mask]
+    scores = scores[mask]
+    class_ids = class_ids[mask]
 
     # Build detections
     detections = []
