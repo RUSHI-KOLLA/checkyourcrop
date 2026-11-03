@@ -30,7 +30,13 @@ jobs:
           cache: pip
 
       - name: Install flyctl
-        uses: superfly/flyctl-actions@v1
+        run: curl -L https://fly.io/install.sh | sh
+        env:
+          FLYCTL_INSTALL: /home/runner/.fly
+        shell: bash
+
+      - name: Add flyctl to PATH
+        run: echo "$HOME/.fly/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
