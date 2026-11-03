@@ -2,10 +2,10 @@
 """
 Deploy to Fly.io using flyctl.
 """
+import json
 import os
 import subprocess
 import sys
-import json
 
 
 def run_cmd(cmd: list[str], cwd: str = None, env: dict = None) -> tuple[int, str, str]:
