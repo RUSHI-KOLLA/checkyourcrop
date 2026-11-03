@@ -5,6 +5,7 @@ Deploy to Fly.io using flyctl.
 import os
 import subprocess
 import sys
+import json
 
 
 def run_cmd(cmd: list[str], cwd: str = None, env: dict = None) -> tuple[int, str, str]:
@@ -32,19 +33,20 @@ def main():
         print("deploy_fly: SKIP (FLY_API_TOKEN not set)")
         return 0
 
+    # Clean token (remove any whitespace/newlines)
+    fly_token = fly_token.strip()
+
     # Check if flyctl is available
     code, _, _ = run_cmd(["flyctl", "version"])
     if code != 0:
         print("deploy_fly: SKIP (flyctl not installed)")
         return 0
 
-    # Login with token
+    # Prepare environment with FLY_API_TOKEN
     env = {**os.environ, "FLY_API_TOKEN": fly_token}
-    code, out, err = run_cmd(["flyctl", "auth", "token"], env=env)
-    if code != 0:
-        return False, f"deploy_fly: FAIL (auth failed)\n{out}\n{err}"
 
     # Check if app exists
+    print(f"Checking Fly app: {app_name}")
     code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
     app_exists = app_name in out
 
@@ -53,15 +55,10 @@ def main():
         print(f"Creating Fly app: {app_name}")
         code, out, err = run_cmd(["flyctl", "apps", "create", app_name, "--generate-name"], env=env)
         if code != 0:
-            return False, f"deploy_fly: FAIL (app create failed)\n{out}\n{err}"
-        # Extract actual app name from output
-        for line in out.split('\n'):
-            if 'created' in line.lower() and app_name in line:
-                parts = line.split()
-                for p in parts:
-                    if p.startswith(app_name):
-                        app_name = p
-                        break
+            # App might already exist, check again
+            code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
+            if app_name not in out:
+                return False, f"deploy_fly: FAIL (app create failed)\n{out}\n{err}"
 
     # Set secrets
     secrets = [
@@ -73,6 +70,7 @@ def main():
     ]
     for key, value in secrets:
         if value:
+            print(f"Setting secret: {key}")
             code, out, err = run_cmd(["flyctl", "secrets", "set", f"{key}={value}", "-a", app_name], env=env)
             if code != 0:
                 print(f"Warning: failed to set secret {key}: {err}")
@@ -86,7 +84,6 @@ def main():
     # Get app URL
     code, out, err = run_cmd(["flyctl", "status", "-a", app_name, "--json"], env=env)
     if code == 0:
-        import json
         try:
             status = json.loads(out)
             hostname = status.get("Hostname", f"{app_name}.fly.dev")
