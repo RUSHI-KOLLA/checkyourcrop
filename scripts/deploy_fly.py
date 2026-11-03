@@ -2,10 +2,10 @@
 """
 Deploy to Fly.io using flyctl.
 """
-import json
 import os
 import subprocess
 import sys
+import json
 
 
 def run_cmd(cmd: list[str], cwd: str = None, env: dict = None) -> tuple[int, str, str]:
@@ -53,7 +53,7 @@ def main():
     print("Authenticating with Fly.io...")
     code, out, err = run_cmd(["flyctl", "auth", "token", fly_token], env=env)
     if code != 0:
-        print(f"flyctl auth token failed: {err}")
+        print(f"Warning: flyctl auth token failed: {err}")
 
     # Check if app exists
     print(f"Checking Fly app: {app_name}")
@@ -65,10 +65,19 @@ def main():
         print(f"Creating Fly app: {app_name}")
         code, out, err = run_cmd(["flyctl", "apps", "create", app_name, "--generate-name"], env=env)
         if code != 0:
-            # App might already exist, check again
+            # Check if app exists now (might have been created by another process)
             code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
             if app_name not in out:
-                return False, f"deploy_fly: FAIL (app create failed)\n{out}\n{err}"
+                # Check if error is 500 (server error) - app might already exist
+                if "status 500" in err or "status 500" in out:
+                    print("Fly API returned 500, checking if app exists...")
+                    code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
+                    if app_name in out:
+                        print("App exists despite 500 error")
+                    else:
+                        return False, f"deploy_fly: FAIL (app create failed)\n{out}\n{err}"
+                else:
+                    return False, f"deploy_fly: FAIL (app create failed)\n{out}\n{err}"
 
     # Set secrets
     secrets = [
