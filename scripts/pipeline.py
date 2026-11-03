@@ -283,6 +283,31 @@ def stage_smoke() -> tuple[bool, str]:
     return False, "smoke: FAIL (service did not become healthy in 60s)"
 
 
+def stage_deploy_fly() -> tuple[bool, str]:
+    """Deploy to Fly.io."""
+    # Check for required env vars
+    app_name = os.getenv("FLY_APP_NAME")
+    fly_token = os.getenv("FLY_API_TOKEN")
+    if not app_name:
+        return True, "deploy_fly: SKIP (FLY_APP_NAME not set)"
+    if not fly_token:
+        return True, "deploy_fly: SKIP (FLY_API_TOKEN not set)"
+
+    # Check if flyctl is available
+    code, _, _ = run_cmd(["flyctl", "version"])
+    if code != 0:
+        return True, "deploy_fly: SKIP (flyctl not installed)"
+
+    # Run deploy script
+    code, out, err = run_cmd([
+        "python", "scripts/deploy_fly.py"
+    ], env={**os.environ, "FLY_APP_NAME": app_name, "FLY_API_TOKEN": fly_token})
+    if code == 0:
+        return True, "deploy_fly: PASS"
+    else:
+        return False, f"deploy_fly: FAIL\n{out}\n{err}"
+
+
 STAGES = {
     "lint": stage_lint,
     "test": stage_test,
@@ -290,6 +315,7 @@ STAGES = {
     "evaluate": stage_evaluate,
     "register": stage_register,
     "deploy": stage_deploy,
+    "deploy_fly": stage_deploy_fly,
     "smoke": stage_smoke,
 }
 

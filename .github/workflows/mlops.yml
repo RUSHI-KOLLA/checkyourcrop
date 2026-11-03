@@ -15,8 +15,8 @@ jobs:
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       HF_MODEL_REPO: ${{ vars.HF_MODEL_REPO }}
-      HF_SPACE: ${{ vars.HF_SPACE }}
-      SERVICE_URL: ${{ vars.SERVICE_URL }}
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_APP_NAME: ${{ vars.FLY_APP_NAME }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,12 +29,17 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Install flyctl
+        uses: superfly/flyctl-actions-setup@v1
+
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
       - name: Run lint, test, build
         run: python scripts/pipeline.py --stage lint,test,build
 
-      - name: Run evaluate, register, deploy, smoke
-        if: env.HF_TOKEN != '' && env.HF_MODEL_REPO != '' && env.HF_SPACE != '' && env.SERVICE_URL != ''
-        run: python scripts/pipeline.py --stage evaluate,register,deploy,smoke
+      - name: Run evaluate, register, deploy_fly, smoke
+        if: env.HF_TOKEN != '' && env.HF_MODEL_REPO != '' && env.FLY_API_TOKEN != '' && env.FLY_APP_NAME != ''
+        env:
+          SERVICE_URL: https://${{ vars.FLY_APP_NAME }}.fly.dev
+        run: python scripts/pipeline.py --stage evaluate,register,deploy_fly,smoke
