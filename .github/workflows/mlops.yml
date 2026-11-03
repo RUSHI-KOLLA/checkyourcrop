@@ -30,7 +30,7 @@ jobs:
           cache: pip
 
       - name: Install flyctl
-        uses: superfly/flyctl-actions-setup@v1
+        uses: superfly/flyctl-actions@v1
 
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
