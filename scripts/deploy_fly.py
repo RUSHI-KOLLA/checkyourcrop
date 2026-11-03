@@ -2,10 +2,10 @@
 """
 Deploy to Fly.io using flyctl.
 """
-import json
 import os
 import subprocess
 import sys
+import json
 
 
 def run_cmd(cmd: list[str], cwd: str = None, env: dict = None) -> tuple[int, str, str]:
@@ -33,8 +33,12 @@ def main():
         print("deploy_fly: SKIP (FLY_API_TOKEN not set)")
         return 0
 
-    # Clean token (remove any whitespace/newlines)
-    fly_token = fly_token.strip()
+    # Clean token aggressively - remove all whitespace, newlines, control chars
+    fly_token = "".join(fly_token.split())
+
+    if not fly_token:
+        print("deploy_fly: SKIP (FLY_API_TOKEN is empty after cleaning)")
+        return 0
 
     # Check if flyctl is available
     code, _, _ = run_cmd(["flyctl", "version"])
@@ -42,15 +46,14 @@ def main():
         print("deploy_fly: SKIP (flyctl not installed)")
         return 0
 
-    # Prepare environment with FLY_API_TOKEN
+    # Prepare environment
     env = {**os.environ, "FLY_API_TOKEN": fly_token}
 
-    # Explicitly set token via flyctl auth
+    # Explicitly set token via flyctl auth command
     print("Authenticating with Fly.io...")
     code, out, err = run_cmd(["flyctl", "auth", "token", fly_token], env=env)
     if code != 0:
-        print(f"Warning: flyctl auth token failed: {err}")
-        # Fall back to env var
+        print(f"flyctl auth token failed: {err}")
 
     # Check if app exists
     print(f"Checking Fly app: {app_name}")
