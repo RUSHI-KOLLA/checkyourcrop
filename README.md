@@ -267,3 +267,4 @@ Error responses:
 - Built production-grade FastAPI inference service with letterbox preprocessing, numpy NMS, ONNX/PT dual backend, per-IP rate limiting, and base64 annotated responses
 - Created automated regression gate comparing map50_95 against baseline on held-out golden set, blocking deploy on >1.5% drop with clear SKIP/FAIL/PASS semantics# Trigger workflow
 # Updated Fly.io token
+# Updated Fly.io token
