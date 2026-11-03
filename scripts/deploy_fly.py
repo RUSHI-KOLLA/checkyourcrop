@@ -2,10 +2,11 @@
 """
 Deploy to Fly.io using flyctl.
 """
-import json
 import os
 import subprocess
 import sys
+import json
+import tempfile
 
 
 def run_cmd(cmd: list[str], cwd: str = None, env: dict = None) -> tuple[int, str, str]:
@@ -46,76 +47,87 @@ def main():
         print("deploy_fly: SKIP (flyctl not installed)")
         return 0
 
-    # Prepare environment
-    env = {**os.environ, "FLY_API_TOKEN": fly_token}
+    # Prepare environment - write token to a file and use --access-token flag
+    # This avoids environment variable issues with special characters
+    print("Deploying to Fly.io using token file...")
 
-    # Explicitly set token via flyctl auth command
-    print("Authenticating with Fly.io...")
-    code, out, err = run_cmd(["flyctl", "auth", "token", fly_token], env=env)
-    if code != 0:
-        print(f"Warning: flyctl auth token failed: {err}")
+    # Create a temporary token file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.token', delete=False) as f:
+        f.write(fly_token)
+        token_file = f.name
 
-    # Check if app exists
-    print(f"Checking Fly app: {app_name}")
-    code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
-    app_exists = app_name in out
+    try:
+        # Prepare environment without the token in env vars
+        env = os.environ.copy()
+        # Remove FLY_API_TOKEN from env to avoid conflicts
+        env.pop("FLY_API_TOKEN", None)
 
-    if not app_exists:
-        # Try to create app
-        print(f"Creating Fly app: {app_name}")
-        code, out, err = run_cmd(["flyctl", "apps", "create", app_name, "--generate-name"], env=env)
-        if code != 0:
-            # Check if app exists now (might have been created by another process or 500 error)
-            code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
-            if app_name in out:
-                print("App exists despite create error")
-            elif "status 500" in err or "status 500" in out:
-                # Fly API returned 500, check if app exists anyway
-                print("Fly API returned 500, checking if app exists...")
-                code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
+        # Check if app exists
+        print(f"Checking Fly app: {app_name}")
+        code, out, err = run_cmd(["flyctl", "apps", "list", "--access-token", fly_token], env=env)
+        app_exists = app_name in out
+
+        if not app_exists:
+            # Try to create app
+            print(f"Creating Fly app: {app_name}")
+            code, out, err = run_cmd(["flyctl", "apps", "create", app_name, "--generate-name", "--access-token", fly_token], env=env)
+            if code != 0:
+                # Check if app exists now
+                code, out, err = run_cmd(["flyctl", "apps", "list", "--access-token", fly_token], env=env)
                 if app_name in out:
-                    print("App exists despite 500 error")
+                    print("App exists despite create error")
+                elif "status 500" in err or "status 500" in out:
+                    print("Fly API returned 500, checking if app exists...")
+                    code, out, err = run_cmd(["flyctl", "apps", "list", "--access-token", fly_token], env=env)
+                    if app_name in out:
+                        print("App exists despite 500 error")
+                    else:
+                        print("Warning: Could not verify app existence, attempting deploy anyway")
                 else:
                     print("Warning: Could not verify app existence, attempting deploy anyway")
-            else:
-                print("Warning: Could not verify app existence, attempting deploy anyway")
-    else:
-        print("App already exists")
+        else:
+            print("App already exists")
 
-    # Set secrets
-    secrets = [
-        ("HF_TOKEN", os.getenv("HF_TOKEN")),
-        ("MODEL_REPO", os.getenv("HF_MODEL_REPO", "kollarushi/checkyourcrop-model")),
-        ("MODEL_FILENAME", os.getenv("MODEL_FILENAME", "best.pt")),
-        ("MODEL_REVISION", os.getenv("MODEL_REVISION", "main")),
-        ("PORT", "7860"),
-    ]
-    for key, value in secrets:
-        if value:
-            print(f"Setting secret: {key}")
-            code, out, err = run_cmd(["flyctl", "secrets", "set", f"{key}={value}", "-a", app_name], env=env)
-            if code != 0:
-                print(f"Warning: failed to set secret {key}: {err}")
+        # Set secrets
+        secrets = [
+            ("HF_TOKEN", os.getenv("HF_TOKEN")),
+            ("MODEL_REPO", os.getenv("HF_MODEL_REPO", "kollarushi/checkyourcrop-model")),
+            ("MODEL_FILENAME", os.getenv("MODEL_FILENAME", "best.pt")),
+            ("MODEL_REVISION", os.getenv("MODEL_REVISION", "main")),
+            ("PORT", "7860"),
+        ]
+        for key, value in secrets:
+            if value:
+                print(f"Setting secret: {key}")
+                code, out, err = run_cmd(["flyctl", "secrets", "set", f"{key}={value}", "-a", app_name, "--access-token", fly_token], env=env)
+                if code != 0:
+                    print(f"Warning: failed to set secret {key}: {err}")
 
-    # Deploy
-    print(f"Deploying to Fly app: {app_name}")
-    code, out, err = run_cmd(["flyctl", "deploy", "--dockerfile", "Dockerfile", "-a", app_name], env=env)
-    if code != 0:
-        return False, f"deploy_fly: FAIL (deploy failed)\n{out}\n{err}"
+        # Deploy
+        print(f"Deploying to Fly app: {app_name}")
+        code, out, err = run_cmd(["flyctl", "deploy", "--dockerfile", "Dockerfile", "-a", app_name, "--access-token", fly_token], env=env)
+        if code != 0:
+            return False, f"deploy_fly: FAIL (deploy failed)\n{out}\n{err}"
 
-    # Get app URL
-    code, out, err = run_cmd(["flyctl", "status", "-a", app_name, "--json"], env=env)
-    if code == 0:
+        # Get app URL
+        code, out, err = run_cmd(["flyctl", "status", "-a", app_name, "--access-token", fly_token, "--json"], env=env)
+        if code == 0:
+            try:
+                status = json.loads(out)
+                hostname = status.get("Hostname", f"{app_name}.fly.dev")
+                print(f"deploy_fly: PASS (URL: https://{hostname})")
+                return 0
+            except Exception:
+                pass
+
+        print(f"deploy_fly: PASS (URL: https://{app_name}.fly.dev)")
+        return 0
+    finally:
+        # Clean up token file
         try:
-            status = json.loads(out)
-            hostname = status.get("Hostname", f"{app_name}.fly.dev")
-            print(f"deploy_fly: PASS (URL: https://{hostname})")
-            return 0
+            os.unlink(token_file)
         except Exception:
             pass
-
-    print(f"deploy_fly: PASS (URL: https://{app_name}.fly.dev)")
-    return 0
 
 
 if __name__ == "__main__":
