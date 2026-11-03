@@ -220,7 +220,8 @@
       verdictBadge.className = 'verdict ' + data.verdict;
       countCrop.textContent = data.counts.crop || 0;
       countWeed.textContent = data.counts.weed || 0;
-      countOther.textContent = data.counts.other || 0      const total = (data.counts.crop || 0) + (data.counts.weed || 0) + (data.counts.other || 0);
+      countOther.textContent = data.counts.other || 0;
+const total = (data.counts.crop || 0) + (data.counts.weed || 0) + (data.counts.other || 0);
       countTotal.textContent = total;
 
       detectionsEl.innerHTML = '';
