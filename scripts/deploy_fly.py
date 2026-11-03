@@ -2,10 +2,10 @@
 """
 Deploy to Fly.io using flyctl.
 """
-import json
 import os
 import subprocess
 import sys
+import json
 
 
 def run_cmd(cmd: list[str], cwd: str = None, env: dict = None) -> tuple[int, str, str]:
@@ -61,23 +61,26 @@ def main():
     app_exists = app_name in out
 
     if not app_exists:
-        # Create app
+        # Try to create app
         print(f"Creating Fly app: {app_name}")
         code, out, err = run_cmd(["flyctl", "apps", "create", app_name, "--generate-name"], env=env)
         if code != 0:
-            # Check if app exists now (might have been created by another process)
+            # Check if app exists now (might have been created by another process or 500 error)
             code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
-            if app_name not in out:
-                # Check if error is 500 (server error) - app might already exist
-                if "status 500" in err or "status 500" in out:
-                    print("Fly API returned 500, checking if app exists...")
-                    code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
-                    if app_name in out:
-                        print("App exists despite 500 error")
-                    else:
-                        return False, f"deploy_fly: FAIL (app create failed)\n{out}\n{err}"
+            if app_name in out:
+                print("App exists despite create error")
+            elif "status 500" in err or "status 500" in out:
+                # Fly API returned 500, check if app exists anyway
+                print("Fly API returned 500, checking if app exists...")
+                code, out, err = run_cmd(["flyctl", "apps", "list"], env=env)
+                if app_name in out:
+                    print("App exists despite 500 error")
                 else:
-                    return False, f"deploy_fly: FAIL (app create failed)\n{out}\n{err}"
+                    print("Warning: Could not verify app existence, attempting deploy anyway")
+            else:
+                print("Warning: Could not verify app existence, attempting deploy anyway")
+    else:
+        print("App already exists")
 
     # Set secrets
     secrets = [
