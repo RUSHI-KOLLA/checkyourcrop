@@ -2,10 +2,11 @@
 """
 Deploy to Fly.io using flyctl.
 """
+import contextlib
+import json
 import os
 import subprocess
 import sys
-import json
 import tempfile
 
 
@@ -124,11 +125,10 @@ def main():
         return 0
     finally:
         # Clean up token file
-        try:
+        with contextlib.suppress(Exception):
             os.unlink(token_file)
-        except Exception:
-            pass
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
